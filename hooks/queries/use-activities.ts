@@ -7,6 +7,8 @@ export function useSellerActivitiesQuery(limit = 20, staleTime = 1000 * 30) {
     queryKey: ["activities", "seller", { limit }],
     queryFn: async () => await listActivitiesForSeller(limit),
     staleTime,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev ?? [],
   });

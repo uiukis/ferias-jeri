@@ -30,13 +30,22 @@ function PageInner() {
 
   const vouchers = (data ?? []) as Voucher[];
   const activeCount = vouchers.filter((v) => v.status === "active").length;
+  const now = new Date();
   const monthSales = vouchers
-    .filter(
-      (v) =>
-        new Date(v.created_at) >= monthStart &&
-        String(v.status) !== "expired" &&
-        String(v.status) !== "cancelled"
-    )
+    .filter((v) => {
+      const createdOk = new Date(v.created_at) >= monthStart;
+      const status = String(v.status ?? "");
+      const embark = v.embark_date ? new Date(String(v.embark_date)) : null;
+      const consideredExpired =
+        embark &&
+        embark < now &&
+        status !== "completed" &&
+        status !== "cancelled" &&
+        status !== "expired";
+      const excluded =
+        status === "expired" || status === "cancelled" || consideredExpired;
+      return createdOk && !excluded;
+    })
     .reduce(
       (acc, v) => acc + (v.partial_amount ?? 0) + (v.embark_amount ?? 0),
       0

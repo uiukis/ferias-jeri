@@ -16,6 +16,8 @@ export function useSellerVouchersQuery(options: Options = {}) {
       return data.slice(0, limit);
     },
     staleTime,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
   });
 }
 
@@ -45,6 +47,8 @@ export function useSellerVouchersPagedQuery(params: {
       return res;
     },
     staleTime,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev ?? { items: [], total: 0 },
   });
