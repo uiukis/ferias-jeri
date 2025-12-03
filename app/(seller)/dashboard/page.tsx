@@ -6,6 +6,7 @@ import Skeleton from "@/components/ui/skeleton";
 import { useSellerActivitiesQuery } from "@/hooks/queries/use-activities";
 import { useSellerVouchersQuery } from "@/hooks/queries/use-vouchers";
 import { useActivitiesRealtime } from "@/hooks/realtime/use-activities-realtime";
+import { useAuthGuard } from "@/hooks/use-auth-guard";
 import type { Voucher } from "@/stores/vouchers";
 import { motion } from "framer-motion";
 import { BadgeDollarSign, Ban, Eye, Plus, ShoppingCart } from "lucide-react";
@@ -13,8 +14,13 @@ import { useRouter } from "next/navigation";
 import { Suspense, useMemo } from "react";
 
 function PageInner() {
+  useAuthGuard({ requireAuth: true, requiredRole: "seller" });
   const router = useRouter();
-  const { data, isLoading: vouchersLoading } = useSellerVouchersQuery({
+  const {
+    data,
+    isLoading: vouchersLoading,
+    error: vouchersError,
+  } = useSellerVouchersQuery({
     staleTime: 1000 * 30,
     limit: 50,
   });
@@ -85,6 +91,13 @@ function PageInner() {
                 Vouchers Ativos
               </div>
               <div className="mt-1 text-2xl font-bold">{activeCount}</div>
+              {vouchersError && (
+                <div className="mt-2 text-xs text-destructive">
+                  {vouchersError instanceof Error
+                    ? vouchersError.message
+                    : String(vouchersError)}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>

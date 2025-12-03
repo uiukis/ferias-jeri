@@ -1,5 +1,6 @@
 "use client";
 import { Card, CardContent } from "@/components/ui/card";
+import { StatusBadge } from "@/components/custom/status-badge";
 import type { Voucher } from "@/stores/vouchers";
 import { motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
@@ -15,32 +16,6 @@ export function VoucherCardList({ vouchers, loading = false }: Props) {
   const currency = (n: number) =>
     n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  function StatusPill({ value }: { value: string }) {
-    const map: Record<string, { label: string; className: string }> = {
-      active: {
-        label: "Ativo",
-        className:
-          "inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700",
-      },
-      completed: {
-        label: "Completado",
-        className:
-          "inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700",
-      },
-      cancelled: {
-        label: "Expirado",
-        className:
-          "inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700",
-      },
-    };
-    const s = String(value ?? "-");
-    const m = map[s] ?? {
-      label: s,
-      className:
-        "inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground",
-    };
-    return <span className={m.className}>{m.label}</span>;
-  }
   if (loading) {
     return (
       <div className="space-y-2">
@@ -91,7 +66,7 @@ export function VoucherCardList({ vouchers, loading = false }: Props) {
                   Data: {passeioDate}
                 </div>
                 <div className="flex items-center justify-between">
-                  <StatusPill value={String(v.status)} />
+                  <StatusBadge value={String(v.status)} />
                   <div className="text-sm font-semibold">{currency(total)}</div>
                 </div>
               </CardContent>
