@@ -1,4 +1,5 @@
 "use client";
+import { CtaButton } from "@/components/custom/button";
 import { DatePicker } from "@/components/custom/date-picker";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import {
@@ -10,16 +11,16 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Field from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Skeleton from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -29,6 +30,7 @@ import {
   maskPhone,
   maskTime,
 } from "@/lib/forms/masks";
+import { listActiveTours } from "@/lib/supabase/tours";
 import { createVoucher } from "@/lib/supabase/vouchers";
 import {
   createVoucherSchema,
@@ -37,8 +39,8 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Suspense, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Suspense, useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 
 function PageInner() {
   useAuthGuard({ requireAuth: true, requiredRole: "seller" });
@@ -50,14 +52,16 @@ function PageInner() {
     register,
     handleSubmit,
     setValue,
+    control,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormValues>({
     resolver: zodResolver(createVoucherSchema),
     defaultValues: {
-      client_name: "",
       client_phone: "",
-      tour_name: "",
+      tour_id: "",
+      passageiros: [],
+      apto: "",
       partial_amount: "",
       embark_amount: "",
       adults: 1,
@@ -69,15 +73,28 @@ function PageInner() {
     },
   });
 
-  const clearForm = () => {
-    reset();
-  };
+  const adults = useWatch({ control, name: "adults" });
+  const children = useWatch({ control, name: "children" });
+  const passageiros = useWatch({ control, name: "passageiros" });
+  useEffect(() => {
+    const total = Math.max(1, Number(adults ?? 0) + Number(children ?? 0));
+    const current = Array.isArray(passageiros) ? passageiros.slice() : [];
+    if (current.length < total) {
+      for (let i = current.length; i < total; i++) current.push("");
+      setValue("passageiros", current, { shouldValidate: true });
+    } else if (current.length > total) {
+      setValue("passageiros", current.slice(0, total), {
+        shouldValidate: true,
+      });
+    }
+  }, [adults, children, passageiros, setValue]);
 
   const onSubmit = handleSubmit(async (values) => {
     try {
       const inserted = await createVoucher({
-        tour_name: values.tour_name,
-        client_name: values.client_name,
+        tour_id: values.tour_id,
+        passageiros: values.passageiros,
+        apto: values.apto || null,
         client_phone: values.client_phone,
         adults: Number(values.adults),
         children: Number(values.children || 0),
@@ -112,22 +129,31 @@ function PageInner() {
         >
           <Card>
             <CardHeader>
-              <CardTitle>Dados do Voucher</CardTitle>
+              <CardTitle>Passageiros e Contato</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {Array.from({
+                  length: Math.max(
+                    1,
+                    Number(adults ?? 0) + Number(children ?? 0)
+                  ),
+                }).map((_, idx) => (
+                  <Field
+                    key={`pass-${idx}`}
+                    label={`Passageiro ${idx + 1}`}
+                    htmlFor={`passageiros_${idx}`}
+                    error={errors.passageiros?.message}
+                  >
+                    <Input
+                      id={`passageiros_${idx}`}
+                      placeholder="Nome completo"
+                      {...register(`passageiros.${idx}` as const)}
+                    />
+                  </Field>
+                ))}
+              </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <Field
-                  label="Nome do Cliente"
-                  htmlFor="client_name"
-                  error={errors.client_name?.message}
-                  className="md:col-span-2"
-                >
-                  <Input
-                    id="client_name"
-                    placeholder="Nome completo"
-                    {...register("client_name")}
-                  />
-                </Field>
                 <Field
                   label="Telefone"
                   htmlFor="client_phone"
@@ -147,17 +173,25 @@ function PageInner() {
                   />
                 </Field>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Passeio e Embarque</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <Field
                   label="Pacote / Passeio"
-                  htmlFor="tour_name"
-                  error={errors.tour_name?.message}
+                  htmlFor="tour_id"
+                  error={errors.tour_id?.message}
                   className="md:col-span-2"
                 >
-                  <Input
-                    id="tour_name"
-                    placeholder="Ex.: Passeio de Buggy"
-                    {...register("tour_name")}
+                  <TourSelect
+                    onChange={(id) =>
+                      setValue("tour_id", id, { shouldValidate: true })
+                    }
                   />
                 </Field>
                 <Field
@@ -199,6 +233,17 @@ function PageInner() {
                   />
                 </Field>
                 <Field
+                  label="Apartamento"
+                  htmlFor="apto"
+                  error={errors.apto?.message}
+                >
+                  <Input
+                    id="apto"
+                    placeholder="Opcional"
+                    {...register("apto")}
+                  />
+                </Field>
+                <Field
                   label="Data de Embarque"
                   htmlFor="embark_date"
                   error={errors.embark_date?.message}
@@ -232,6 +277,14 @@ function PageInner() {
                   />
                 </Field>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Valores e Observações</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="grid gap-4 md:col-span-1">
                   <Field
@@ -288,14 +341,6 @@ function PageInner() {
                 </Field>
               </div>
             </CardContent>
-            <CardFooter className="flex items-center justify-between">
-              <Button variant="ghost" type="button" onClick={clearForm}>
-                Limpar
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Gerando" : "Gerar Voucher"}
-              </Button>
-            </CardFooter>
           </Card>
 
           <AlertDialog open={createdOpen}>
@@ -324,6 +369,11 @@ function PageInner() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          <div className="fixed bottom-10 right-10">
+            <CtaButton type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Gerando" : "Gerar Voucher"}
+            </CtaButton>
+          </div>
         </motion.form>
       </PageContainer>
     </main>
@@ -389,5 +439,35 @@ export default function Page() {
     >
       <PageInner />
     </Suspense>
+  );
+}
+function TourSelect({ onChange }: { onChange: (id: string) => void }) {
+  const [tours, setTours] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await listActiveTours();
+        if (cancelled) return;
+        setTours(list.map((t) => ({ id: t.id, name: t.name })));
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return (
+    <Select onValueChange={(v) => onChange(v)}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Selecione o passeio" />
+      </SelectTrigger>
+      <SelectContent>
+        {tours.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            {t.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

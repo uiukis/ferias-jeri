@@ -35,38 +35,64 @@ export default function Topbar({ initialName }: { initialName?: string }) {
           <LogoFont className="h-6 w-auto" />
         </div>
         <nav className="hidden md:flex items-center gap-4">
-          <motion.a
-            href="/dashboard"
-            className={linkClass("/dashboard")}
-            initial={false}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.02 }}
-            transition={{ duration: 0.25 }}
-          >
-            Dashboard
-          </motion.a>
-          {role === "admin" && (
-            <motion.a
-              href="/admin/reports"
-              className={linkClass("/admin/reports")}
-              initial={false}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ scale: 1.02 }}
-              transition={{ duration: 0.25, delay: 0.05 }}
-            >
-              Reports
-            </motion.a>
+          {role === "seller" && (
+            <>
+              <motion.a
+                href="/dashboard"
+                className={linkClass("/dashboard")}
+                initial={false}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.25 }}
+              >
+                Dashboard
+              </motion.a>
+              <motion.a
+                href="/vouchers"
+                className={linkClass("/vouchers")}
+                initial={false}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.25, delay: 0.1 }}
+              >
+                Vouchers
+              </motion.a>
+            </>
           )}
-          <motion.a
-            href="/vouchers"
-            className={linkClass("/vouchers")}
-            initial={false}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.02 }}
-            transition={{ duration: 0.25, delay: 0.1 }}
-          >
-            Vouchers
-          </motion.a>
+          {role === "admin" && (
+            <>
+              <motion.a
+                href="/ordens"
+                className={linkClass("/ordens")}
+                initial={false}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.25, delay: 0.02 }}
+              >
+                Ordens
+              </motion.a>
+              <motion.a
+                href="/vouchers"
+                className={linkClass("/vouchers")}
+                initial={false}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.25, delay: 0.06 }}
+              >
+                Vouchers
+              </motion.a>
+              <motion.a
+                href="/users"
+                className={linkClass("/users")}
+                initial={false}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.25, delay: 0.1 }}
+              >
+                Usuários
+              </motion.a>
+            </>
+          )}
         </nav>
         <div className="flex items-center gap-3 md:gap-3">
           <button
@@ -106,20 +132,29 @@ export default function Topbar({ initialName }: { initialName?: string }) {
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="absolute left-1/2 top-full z-40 -mt-0.5 w-[95%] max-w-5xl -translate-x-1/2 rounded-b-xl bg-secondary/95 p-3 shadow-md ring-1 ring-black/5 md:hidden"
           >
-            <Link href="/dashboard" className={linkClass("/dashboard")}>
-              Dashboard
-            </Link>
-            {role === "admin" && (
-              <Link
-                href="/admin/reports"
-                className={linkClass("/admin/reports")}
-              >
-                Reports
-              </Link>
+            {role === "seller" && (
+              <>
+                <Link href="/dashboard" className={linkClass("/dashboard")}>
+                  Dashboard
+                </Link>
+                <Link href="/vouchers" className={linkClass("/vouchers")}>
+                  Vouchers
+                </Link>
+              </>
             )}
-            <Link href="/vouchers" className={linkClass("/vouchers")}>
-              Vouchers
-            </Link>
+            {role === "admin" && (
+              <>
+                <Link href="/ordens" className={linkClass("/ordens")}>
+                  Ordens
+                </Link>
+                <Link href="/vouchers" className={linkClass("/vouchers")}>
+                  Vouchers
+                </Link>
+                <Link href="/users" className={linkClass("/users")}>
+                  Usuários
+                </Link>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

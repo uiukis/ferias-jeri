@@ -3,7 +3,9 @@ import { supabase } from "@/lib/supabaseClient";
 import type { Voucher } from "@/stores/vouchers";
 
 export type VoucherInsert = {
-  tour_name: string;
+  tour_id: string;
+  passageiros: string[];
+  apto?: string | null;
   client_name?: string | null;
   client_phone?: string | null;
   adults?: number;
@@ -61,7 +63,7 @@ export async function createVoucher(data: VoucherInsert) {
       seller_id: uid,
       type: "voucher_created",
       title: "Novo voucher criado",
-      subtitle: inserted.tour_name,
+      subtitle: null,
       amount: null,
       voucher_id: inserted.id,
       note: null,
@@ -99,7 +101,7 @@ export async function updateVoucher(
           seller_id: uid!,
           type: "voucher_finalized", 
           title: `Voucher atualizado`,
-          subtitle: updated.tour_name,
+          subtitle: null,
           amount: newParcial - prevParcial,
           voucher_id: updated.id,
           note: "Pagamento parcial registrado",
@@ -110,13 +112,13 @@ export async function updateVoucher(
           seller_id: uid!,
           type: "payment_received",
           title: "Pagamento recebido",
-          subtitle: updated.tour_name,
+          subtitle: null,
           amount: newEmbarque - prevEmbarque,
           voucher_id: updated.id,
           note: null,
         });
       }
-      if (data.status === "completed") {
+      if (data.status === "pago") {
         const received = newEmbarque > 0;
         if (!received) {
           throw new Error(
@@ -127,7 +129,7 @@ export async function updateVoucher(
           seller_id: uid!,
           type: "voucher_finalized",
           title: "Voucher finalizado",
-          subtitle: updated.tour_name,
+          subtitle: null,
           amount: newEmbarque,
           voucher_id: updated.id,
           note: null,
@@ -158,7 +160,7 @@ export async function cancelVoucher(id: string) {
   const { data: updated, error } = await supabase
     .from("vouchers")
     .update({
-      status: "cancelled",
+      status: "cancelado",
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
@@ -173,11 +175,11 @@ export async function autoExpireVouchers(items: Voucher[]) {
   for (const v of items) {
     if (v.deleted) continue;
     const status = String(v.status ?? "");
-    if (status === "completed" || status === "cancelled" || status === "expired") continue;
+    if (status === "pago" || status === "cancelado" || status === "expirado") continue;
     const d = v.embark_date ? new Date(String(v.embark_date)) : null;
     if (d && d < now) {
       try {
-        const updated = await updateVoucher(v.id, { status: "expired" });
+        await updateVoucher(v.id, { status: "expirado" });
         try {
           const { data: auth } = await supabase.auth.getUser();
           const uid = auth.user?.id;
@@ -186,7 +188,7 @@ export async function autoExpireVouchers(items: Voucher[]) {
               seller_id: uid,
               type: "voucher_expired",
               title: "Voucher expirado",
-              subtitle: updated?.tour_name ?? v.tour_name ?? null,
+              subtitle: null,
               amount: null,
               voucher_id: v.id,
               note: "Expirado automaticamente por data de embarque passada",
@@ -221,7 +223,7 @@ export async function listAllVouchersForAdmin() {
   return data;
 }
 
-export type VoucherStatusFilter = "all" | "active" | "completed" | "cancelled" | "expired";
+export type VoucherStatusFilter = "all" | "emitido" | "pago" | "cancelado" | "expirado";
 
 export async function listVouchersForSellerPaged(options: {
   page: number;
@@ -238,7 +240,7 @@ export async function listVouchersForSellerPaged(options: {
   let query = supabase
     .from("vouchers")
     .select(
-      "id,voucher_code,tour_name,created_at,embark_date,partial_amount,embark_amount,status,deleted",
+      "id,voucher_code,tour_id,created_at,embark_date,partial_amount,embark_amount,status,deleted",
       { count: "exact" }
     )
     .eq("deleted", false)
@@ -267,10 +269,10 @@ export async function resetCancelledToActiveForSeller() {
   if (!uid) throw new Error("Não autenticado");
   const { error } = await supabase
     .from("vouchers")
-    .update({ status: "active", updated_at: new Date().toISOString() })
+    .update({ status: "emitido", updated_at: new Date().toISOString() })
     .eq("seller_id", uid)
     .eq("deleted", false)
-    .eq("status", "cancelled");
+    .eq("status", "cancelado");
   if (error) throw error;
 }
 
@@ -280,10 +282,10 @@ export async function resetAllStatusesToActiveForSeller() {
   if (!uid) throw new Error("Não autenticado");
   const { error } = await supabase
     .from("vouchers")
-    .update({ status: "active", updated_at: new Date().toISOString() })
+    .update({ status: "emitido", updated_at: new Date().toISOString() })
     .eq("seller_id", uid)
     .eq("deleted", false)
-    .in("status", ["expired", "completed", "cancelled"]);
+    .in("status", ["expirado", "pago", "cancelado"]);
   if (error) throw error;
 }
 

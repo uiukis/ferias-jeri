@@ -104,32 +104,41 @@ export async function POST(req: NextRequest) {
       status: toPt(item.status),
       valor_parcial: numberBr(item.partial_amount),
       valor_no_embarque: numberBr(item.embark_amount),
-      // English formatted helpers
       embark_date_br: dateBr(item.embark_date),
       end_date_br: dateBr((item as Record<string, unknown>).end_date ?? ""),
       partial_amount_br: numberBr(item.partial_amount),
       embark_amount_br: numberBr(item.embark_amount),
+      title_text: toPt(item.tour_name || (item as Record<string, unknown>).brand || "FÉRIAS JERI"),
     };
-    data.item = { ...item, ...aliases };
+    const adultsNum = Number(item.adults || 0);
+    const childrenNum = Number(item.children || 0);
+    const totalPax = (Number.isFinite(adultsNum) ? adultsNum : 0) + (Number.isFinite(childrenNum) ? childrenNum : 0);
+    const sinalNum = Number(item.partial_amount || 0);
+    const restanteNum = Number(item.embark_amount || 0);
+    const passageirosArr = Array.isArray((item as Record<string, unknown>).passageiros)
+      ? ((item as Record<string, unknown>).passageiros as unknown[])
+      : [];
+    const passageirosHtml = passageirosArr
+      .map((p) => String(p || "").trim())
+      .filter((s) => s.length > 0)
+      .map((s) => `<div class="line">${s}</div>`)
+      .join("");
+    const extended: Record<string, unknown> = {
+      total_pax: totalPax,
+      sinal: sinalNum,
+      restante: restanteNum,
+      sinal_br: numberBr(item.partial_amount),
+      restante_br: numberBr(item.embark_amount),
+      seller_nome: toPt((item as Record<string, unknown>).seller_name ?? ""),
+      apto: toPt((item as Record<string, unknown>).apto ?? ""),
+      passageiros_html: passageirosHtml,
+      total_br: numberBr(Number(item.partial_amount || 0) + Number(item.embark_amount || 0)),
+      criancas_num: Number(item.children || 0),
+    };
+    data.item = { ...item, ...aliases, ...extended };
 
     const merged = mergeTemplate(tpl.template, data);
-    const html = `<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" />
-      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-      <style>
-        html, body { height: 100%; }
-        body { font-family: Arial, sans-serif; color: #0f172a; min-height: 100vh; display: flex; flex-direction: column; }
-        .header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-        .title { font-size: 18px; font-weight: 700; }
-        .muted { color: #64748b; font-size: 12px; }
-        .section { margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { border: 1px solid #e2e8f0; padding: 8px; vertical-align: top; }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        /* Fix footer message at the bottom */
-        .section.text-center.muted { position: fixed; bottom: 16px; left: 0; right: 0; }
-      </style>
-    </head><body>${merged}</body></html>`;
+    const html = merged;
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -137,7 +146,13 @@ export async function POST(req: NextRequest) {
     });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdf = await page.pdf({ format: "A4", printBackground: true });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      pageRanges: "1",
+      scale: 0.98,
+    });
     await browser.close();
 
     const blob = new Blob([Buffer.from(pdf)], { type: "application/pdf" });

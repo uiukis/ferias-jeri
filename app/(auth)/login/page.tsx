@@ -49,7 +49,19 @@ function PageInner() {
   useEffect(() => {
     if (loadingStore) return;
     if (!user) return;
-    const dest = role === "admin" ? "/admin/reports" : "/dashboard";
+    const mustChange = (() => {
+      try {
+        const m = document.cookie.match(/(?:^|; )auth_mcp=([^;]+)/);
+        return !!(m && m[1] === "1");
+      } catch {
+        return false;
+      }
+    })();
+    const dest = mustChange
+      ? "/first-access"
+      : role === "admin"
+      ? "/ordens"
+      : "/dashboard";
     router.replace(dest);
   }, [user, role, loadingStore, router]);
 

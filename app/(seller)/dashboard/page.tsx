@@ -14,7 +14,11 @@ import { useRouter } from "next/navigation";
 import { Suspense, useMemo } from "react";
 
 function PageInner() {
-  useAuthGuard({ requireAuth: true, requiredRole: "seller" });
+  useAuthGuard({
+    requireAuth: true,
+    requiredRole: "seller",
+    redirectTo: "/ordens",
+  });
   const router = useRouter();
   const {
     data,

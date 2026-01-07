@@ -4,7 +4,7 @@ import { create } from "zustand";
 export type Voucher = {
   id: string;
   voucher_code?: string | null;
-  tour_name: string;
+  tour_id: string | null;
   seller_id: string;
   created_at: string;
   embark_date: string | null;
@@ -34,7 +34,7 @@ export const useVouchersStore = create<VouchersState>((set) => ({
       const { data, error } = await supabase
         .from("vouchers")
         .select(
-          "id,voucher_code,tour_name,seller_id,created_at,embark_date,status,deleted,partial_amount,embark_amount"
+          "id,voucher_code,tour_id,seller_id,created_at,embark_date,status,deleted,partial_amount,embark_amount"
         )
         .eq("deleted", false)
         .eq("seller_id", uid)

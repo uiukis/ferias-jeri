@@ -1,10 +1,12 @@
 "use client";
-import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/custom/status-badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { listActiveTours } from "@/lib/supabase/tours";
 import type { Voucher } from "@/stores/vouchers";
 import { motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type Props = {
   vouchers: Voucher[];
@@ -15,6 +17,23 @@ export function VoucherCardList({ vouchers, loading = false }: Props) {
   const router = useRouter();
   const currency = (n: number) =>
     n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const [toursMap, setToursMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const tours = await listActiveTours();
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const t of tours) map[t.id] = t.name;
+        setToursMap(map);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -59,7 +78,9 @@ export function VoucherCardList({ vouchers, loading = false }: Props) {
             >
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold">{v.tour_name}</div>
+                  <div className="font-semibold">
+                    {toursMap[v.tour_id ?? ""] ?? "Passeio"}
+                  </div>
                   <ChevronRight className="h-4 w-4" />
                 </div>
                 <div className="text-xs text-muted-foreground">

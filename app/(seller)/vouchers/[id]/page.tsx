@@ -16,12 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Skeleton from "@/components/ui/skeleton";
 import { useGeneratePdfMutation } from "@/hooks/mutations/use-pdf";
+import { getTourById } from "@/lib/supabase/tours";
 import {
   cancelVoucher,
   excludeVoucher,
   updateVoucher,
 } from "@/lib/supabase/vouchers";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuthStore } from "@/stores/auth";
 import { usePdfStore } from "@/stores/pdf";
 import type { Voucher } from "@/stores/vouchers";
 import { motion } from "framer-motion";
@@ -52,6 +54,7 @@ export default function Page() {
         embark_time?: string | null;
         notes?: string | null;
         embark_date?: string | null;
+        passageiros?: string[] | null;
       })
     | null
   >(null);
@@ -68,6 +71,10 @@ export default function Page() {
   const setPdfUrl = (u: string | null) => usePdfStore.getState().setUrl(u);
   const setPdfFileName = (n: string) => usePdfStore.getState().setFileName(n);
   const generatePdf = useGeneratePdfMutation();
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = role === "admin";
+  const [tourName, setTourName] = useState<string>("-");
+  const [sellerName, setSellerName] = useState<string>("-");
 
   useEffect(() => {
     let mounted = true;
@@ -119,17 +126,33 @@ export default function Page() {
           if (
             embark &&
             embark < new Date() &&
-            status !== "completed" &&
-            status !== "cancelled" &&
-            status !== "expired"
+            status !== "pago" &&
+            status !== "cancelado" &&
+            status !== "expirado"
           ) {
-            await updateVoucher(data.id, { status: "expired" });
+            await updateVoucher(data.id, { status: "expirado" });
             const { data: refreshed } = await supabase
               .from("vouchers")
               .select("*")
               .eq("id", data.id)
               .single();
             setVoucher(refreshed ?? data);
+          }
+        } catch {}
+        try {
+          const t = await getTourById(String(data.tour_id));
+          setTourName(t?.name ?? "-");
+        } catch {}
+        try {
+          if (data?.seller_id) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("name")
+              .eq("id", data.seller_id)
+              .single();
+            setSellerName(
+              (prof as { name?: string | null } | null)?.name ?? "-"
+            );
           }
         } catch {}
       }
@@ -184,20 +207,20 @@ export default function Page() {
   };
 
   const statusNow = String(voucher?.status ?? "");
-  const isCancelled = statusNow === "cancelled";
-  const isExpired = statusNow === "expired";
-  const isCompleted = statusNow === "completed";
+  const isCancelled = statusNow === "cancelado";
+  const isExpired = statusNow === "expirado";
+  const isCompleted = statusNow === "pago";
   const canCancel = !isExpired && !isCancelled && !deleted;
   const canExclude = !isCancelled && !deleted;
   const canFinalize =
-    !isExpired && !isCancelled && !deleted && statusNow === "active";
+    !isExpired && !isCancelled && !deleted && statusNow === "emitido";
 
   const [finalizing, setFinalizing] = useState(false);
   const onFinalize = async () => {
     setFinalizing(true);
     try {
       const id = voucher?.id ?? paramId;
-      await updateVoucher(id, { status: "completed" });
+      await updateVoucher(id, { status: "pago" });
       const { data } = await supabase
         .from("vouchers")
         .select("*")
@@ -273,29 +296,44 @@ export default function Page() {
                 <CardHeader>
                   <CardTitle>Informações do Cliente</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Nome</div>
-                    <div className="text-sm font-medium">
-                      {voucher?.client_name ?? "-"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Contato</div>
-                    <div className="text-sm font-medium">
-                      {voucher?.client_phone ?? "-"}
-                    </div>
-                  </div>
+                <CardContent className=" space-y-2">
                   <div>
                     <div className="text-xs text-muted-foreground">
-                      Viajantes
+                      Passageiros
                     </div>
-                    <div className="text-sm font-medium">
-                      {voucher
-                        ? `${voucher.adults ?? 1} adulto(s), ${
-                            voucher.children ?? 0
-                          } criança(s)`
-                        : "-"}
+                    {Array.isArray(voucher?.passageiros) &&
+                    (voucher!.passageiros as string[]).filter((p) =>
+                      String(p || "").trim()
+                    ).length > 0 ? (
+                      <div className="text-sm font-medium">
+                        {(voucher!.passageiros as string[])
+                          .filter((p) => String(p || "").trim().length > 0)
+                          .join(", ")}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">-</div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        Contato
+                      </div>
+                      <div className="text-sm font-medium">
+                        {voucher?.client_phone ?? "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        Viajantes
+                      </div>
+                      <div className="text-sm font-medium">
+                        {voucher
+                          ? `${voucher.adults ?? 1} adulto(s), ${
+                              voucher.children ?? 0
+                            } criança(s)`
+                          : "-"}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -311,9 +349,7 @@ export default function Page() {
                     <CardTitle>Detalhes do Pacote</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    <div className="text-sm font-semibold">
-                      {voucher?.tour_name ?? "-"}
-                    </div>
+                    <TourName id={voucher?.tour_id ?? null} />
                     <div className="text-sm text-muted-foreground">
                       Local embarque: {voucher?.embark_location ?? "-"}
                     </div>
@@ -371,22 +407,53 @@ export default function Page() {
                   <CardHeader>
                     <CardTitle>Preço e Pagamento</CardTitle>
                   </CardHeader>
-                  <CardContent className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground">
-                        Status
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Preço (parcial)
                       </div>
-                      <StatusBadge value={String(voucher?.status ?? "-")} />
+                      <div className="text-sm font-medium">
+                        {currency(Number(voucher?.partial_amount ?? 0))}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Total</div>
-                      <div className="text-lg font-semibold">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Valor no embarque
+                      </div>
+                      <div className="text-sm font-medium">
+                        {currency(Number(voucher?.embark_amount ?? 0))}
+                      </div>
+                    </div>
+                    <div className="h-px bg-border" />
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold">Total</div>
+                      <div className="text-sm font-semibold">
                         {currency(
                           Number(voucher?.partial_amount ?? 0) +
                             Number(voucher?.embark_amount ?? 0)
                         )}
                       </div>
                     </div>
+                    {String(voucher?.status ?? "") === "emitido" && (
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium text-emerald-600">
+                          A receber no embarque
+                        </div>
+                        <div className="text-sm font-semibold text-emerald-600">
+                          {currency(Number(voucher?.embark_amount ?? 0))}
+                        </div>
+                      </div>
+                    )}
+                    {String(voucher?.status ?? "") === "pago" && (
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium text-emerald-600">
+                          Recebido no embarque
+                        </div>
+                        <div className="text-sm font-semibold text-emerald-600">
+                          {currency(Number(voucher?.embark_amount ?? 0))}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -394,16 +461,19 @@ export default function Page() {
 
             <div className="space-y-4">
               <Card>
-                <CardContent className="p-4 space-y-2">
+                <CardHeader>
+                  <CardTitle>Ações</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   <div className="flex gap-2">
-                    {!isCompleted && (
+                    {isAdmin && !isCompleted && (
                       <Button variant="outline" disabled>
                         <Pencil className="mr-2 h-4 w-4" />
                         Editar
                       </Button>
                     )}
                     <Button
-                      variant="secondary"
+                      className="bg-black text-white hover:bg-black/90"
                       onClick={async () => {
                         if (!voucher || pdfLoading) return;
                         setPdfLoading(true);
@@ -417,15 +487,20 @@ export default function Page() {
                             embark_time?: string | null;
                             embark_date?: string | null;
                             notes?: string | null;
+                            apto?: string | null;
+                            passageiros?: string[] | null;
                           };
                           const vp = Number(voucher.partial_amount ?? 0);
                           const ve = Number(voucher.embark_amount ?? 0);
+                          const totalPax =
+                            Number(ext.adults ?? 0) +
+                              Number(ext.children ?? 0) || 0;
                           const payload = {
                             templateName: "voucher_default",
                             data: {
                               item: {
                                 voucher_code: voucher.voucher_code,
-                                tour_name: voucher.tour_name,
+                                tour_name: tourName,
                                 client_name: ext.client_name ?? "",
                                 client_phone: ext.client_phone ?? "",
                                 embark_location: ext.embark_location ?? "",
@@ -438,6 +513,11 @@ export default function Page() {
                                   : "",
                                 adults: ext.adults ?? 1,
                                 children: ext.children ?? 0,
+                                total_pax: totalPax,
+                                apto: ext.apto ?? "",
+                                passageiros: Array.isArray(ext.passageiros)
+                                  ? ext.passageiros
+                                  : [],
                                 notes: ext.notes ?? "",
                                 partial_amount: vp,
                                 embark_amount: ve,
@@ -454,9 +534,9 @@ export default function Page() {
                                   })
                                   .replace("R$", ""),
                                 status: voucher.status ?? "",
-                                finalized:
-                                  String(voucher.status) === "completed",
+                                finalized: String(voucher.status) === "pago",
                                 logo_url: "",
+                                seller_name: sellerName,
                               },
                             },
                           };
@@ -487,7 +567,7 @@ export default function Page() {
                     </Button>
                     {canFinalize && !isCompleted && (
                       <Button
-                        variant="outline"
+                        className="bg-neutral-200 text-neutral-700 hover:bg-neutral-300 border border-neutral-300"
                         onClick={onFinalize}
                         disabled={finalizing}
                       >
@@ -496,7 +576,7 @@ export default function Page() {
                       </Button>
                     )}
                   </div>
-                  {!isCompleted && canExclude && (
+                  {isAdmin && !isCompleted && canExclude && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive">
@@ -544,7 +624,7 @@ export default function Page() {
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
-                          variant="outline"
+                          className="bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100"
                           disabled={cancelling || deleted}
                         >
                           <Ban className="mr-2 h-4 w-4" />
@@ -583,4 +663,28 @@ export default function Page() {
       />
     </main>
   );
+}
+
+function TourName({ id }: { id: string | null }) {
+  const [name, setName] = useState<string>("-");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!id) {
+          setName("-");
+          return;
+        }
+        const t = await getTourById(String(id));
+        if (cancelled) return;
+        setName(t?.name ?? "-");
+      } catch {
+        setName("-");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  return <div className="text-sm font-semibold">{name}</div>;
 }

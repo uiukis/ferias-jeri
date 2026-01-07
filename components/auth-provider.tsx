@@ -72,6 +72,8 @@ export default function AuthProvider({
         });
         document.cookie = `auth_uid=${u.id}; path=/`;
         document.cookie = `auth_role=${normalizedRole ?? ""}; path=/`;
+        const mustChange = (userMeta?.must_change_password as boolean | undefined) === true;
+        document.cookie = `auth_mcp=${mustChange ? "1" : ""}; path=/`;
         const finalName =
           cookieName ?? (userMeta?.name as string | null) ?? prof.name;
         if (finalName) {
@@ -118,6 +120,8 @@ export default function AuthProvider({
           });
           document.cookie = `auth_uid=${u.id}; path=/`;
           document.cookie = `auth_role=${normalizedRole ?? ""}; path=/`;
+          const mustChange = (userMeta?.must_change_password as boolean | undefined) === true;
+          document.cookie = `auth_mcp=${mustChange ? "1" : ""}; path=/`;
           const finalName =
             cookieName ?? (userMeta?.name as string | null) ?? prof.name;
           if (finalName) {
@@ -129,6 +133,7 @@ export default function AuthProvider({
           document.cookie = `auth_uid=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
           document.cookie = `auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
           document.cookie = `auth_name=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+          document.cookie = `auth_mcp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
         }
         setInitialized(true);
       }

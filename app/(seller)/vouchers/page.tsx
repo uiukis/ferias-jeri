@@ -9,7 +9,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSellerVouchersPagedQuery } from "@/hooks/queries/use-vouchers";
 import { useVouchersRealtime } from "@/hooks/realtime/use-vouchers-realtime";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { listActiveTours } from "@/lib/supabase/tours";
+import { autoExpireVouchers } from "@/lib/supabase/vouchers";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuthStore } from "@/stores/auth";
 import type { Voucher } from "@/stores/vouchers";
+import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { formatDate } from "date-fns";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
@@ -17,12 +22,14 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import { Suspense } from "react";
 
-type StatusFilter = "all" | "active" | "completed" | "cancelled" | "expired";
+type StatusFilter = "all" | "emitido" | "pago" | "cancelado" | "expirado";
 
 function PageInner() {
-  useAuthGuard({ requireAuth: true, requiredRole: "seller" });
+  useAuthGuard({ requireAuth: true });
   useVouchersRealtime();
   const router = useRouter();
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = role === "admin";
   const [status, setStatus] = React.useState<StatusFilter>("all");
   const [date, setDate] = React.useState<Date | undefined>(undefined);
 
@@ -31,13 +38,62 @@ function PageInner() {
     [10, 25, 50].includes(10) ? 10 : 10
   );
 
-  const { data, isLoading, error } = useSellerVouchersPagedQuery({
+  const sellerQuery = useSellerVouchersPagedQuery({
     page,
     pageSize,
     status: status,
     date: date,
     staleTime: 1000 * 30,
   });
+
+  const adminQuery = useQuery<{ items: Voucher[]; total: number }, Error>({
+    queryKey: [
+      "vouchers",
+      "admin",
+      { page, pageSize, status, date: date?.toISOString() },
+    ],
+    queryFn: async () => {
+      const from = Math.max(0, (page - 1) * pageSize);
+      const to = from + pageSize - 1;
+      let query = supabase
+        .from("vouchers")
+        .select(
+          "id,voucher_code,tour_id,created_at,embark_date,partial_amount,embark_amount,status,deleted",
+          { count: "exact" }
+        )
+        .eq("deleted", false)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+      if (status && status !== "all") {
+        query = query.eq("status", status);
+      }
+      if (date) {
+        const d = new Date(date);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        query = query
+          .gte("embark_date", start.toISOString())
+          .lt("embark_date", end.toISOString());
+      }
+      const { data, error, count } = await query;
+      if (error) throw error;
+      try {
+        await autoExpireVouchers((data ?? []) as Voucher[]);
+      } catch {}
+      return { items: (data ?? []) as Voucher[], total: count ?? 0 };
+    },
+    staleTime: 1000 * 30,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev ?? { items: [], total: 0 },
+  });
+
+  const data = (isAdmin ? adminQuery.data : sellerQuery.data) as
+    | { items: Voucher[]; total: number }
+    | undefined;
+  const isLoading = isAdmin ? adminQuery.isLoading : sellerQuery.isLoading;
+  const error = (isAdmin ? adminQuery.error : sellerQuery.error) ?? null;
 
   const vouchers = (data?.items ?? []) as Voucher[];
   const total = Number(data?.total ?? 0);
@@ -47,32 +103,49 @@ function PageInner() {
   const currency = (n: number) =>
     n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+  const [toursMap, setToursMap] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const tours = await listActiveTours();
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const t of tours) map[t.id] = t.name;
+        setToursMap(map);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const items: { label: string; value: StatusFilter }[] = [
     { label: "Todos", value: "all" },
-    { label: "Ativos", value: "active" },
-    { label: "Completados", value: "completed" },
-    { label: "Cancelados", value: "cancelled" },
-    { label: "Expirados", value: "expired" },
+    { label: "Emitidos", value: "emitido" },
+    { label: "Pagos", value: "pago" },
+    { label: "Cancelados", value: "cancelado" },
+    { label: "Expirados", value: "expirado" },
   ];
 
   function StatusPill({ value }: { value: string }) {
     const map: Record<string, { label: string; className: string }> = {
-      active: {
-        label: "Ativo",
+      emitido: {
+        label: "Emitido",
         className:
           "inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700",
       },
-      completed: {
-        label: "Completado",
+      pago: {
+        label: "Pago",
         className:
           "inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700",
       },
-      cancelled: {
+      cancelado: {
         label: "Cancelado",
         className:
           "inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700",
       },
-      expired: {
+      expirado: {
         label: "Expirado",
         className:
           "inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700",
@@ -99,10 +172,10 @@ function PageInner() {
     },
     {
       header: "Passeio",
-      accessorKey: "tour_name",
+      accessorKey: "tour_id",
       cell: ({ row }) => (
         <span className="font-medium">
-          {String(row.original.tour_name ?? "-")}
+          {toursMap[row.original.tour_id ?? ""] ?? "-"}
         </span>
       ),
     },

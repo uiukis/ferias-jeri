@@ -8,7 +8,7 @@ export const loginSchema = z.object({
     .max(254, "Email muito longo"),
   password: z
     .string({ required_error: "Senha é obrigatória" })
-    .min(6, "Senha deve ter ao menos 6 caracteres")
+    .min(4, "Senha deve ter ao menos 6 caracteres")
     .max(128, "Senha muito longa"),
 });
 
